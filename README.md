@@ -45,3 +45,5 @@ Na janela que se abrirá, selecione quais módulos você deseja executar.
 Escolha se deseja exportar apenas a cena atual ou o projeto inteiro.
 
 Selecione a pasta no seu computador onde os arquivos devem ser salvos.
+
+A ferramenta irá gerar um arquivo compactado contendo todos os JSONs e um arquivo HTML na pasta escolhida. Basta abrir o HTML no seu navegador para visualizar os dados exportados.
