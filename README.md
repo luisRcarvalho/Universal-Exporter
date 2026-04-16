@@ -35,6 +35,7 @@ Esta ferramenta foi desenvolvida e testada tendo como base uma cena de um jogo e
 Durante o mapeamento do Runner, a ferramenta foi capaz de ler com precisão gerenciadores de instâncias baseados em ScriptableObjects, extrair os parâmetros que definem o "game feel" (como ajustes finos de câmera e pós-processamento) e exportar as máquinas de estado que controlam a movimentação e as reações do jogador.
 
 **Como utilizar**
+
 Importe a pasta do Universal Exporter para dentro do seu projeto Unity.
 
 No menu superior da Unity, acesse Tools > Universal Exporter.
