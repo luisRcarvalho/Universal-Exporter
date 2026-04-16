@@ -1,0 +1,77 @@
+#if UNITY_EDITOR
+using System.IO;
+using System.Reflection;
+using System.Text;
+using UnityEngine;
+using UnityEngine.Rendering;
+
+public class PostProcessingVolumeExporter : IExporter
+{
+    public string ModuleName => "postprocessing";
+    public int Order => 30;
+
+    public void ExportProject(ExportContext ctx) { }
+
+    public void ExportScene(UnityEngine.SceneManagement.Scene scene, ExportContext ctx)
+    {
+        var volumes = Object.FindObjectsByType<Volume>(FindObjectsSortMode.None);
+        if (volumes.Length == 0) return;
+
+        foreach (var volume in volumes)
+        {
+            if (volume.profile == null) continue;
+            
+            var sb = new StringBuilder();
+            sb.AppendLine("{");
+            sb.AppendLine($"  \"_meta\": {{ \"profile\": \"{ExportUtils.Esc(volume.profile.name)}\" }},");
+
+            var components = volume.profile.components;
+            for (int i = 0; i < components.Count; i++)
+            {
+                var comp = components[i];
+                if (comp == null) continue;
+                
+                var comma = i < components.Count - 1 ? "," : "";
+                sb.AppendLine($"  \"{comp.GetType().Name}\": {{");
+                sb.AppendLine($"    \"active\": {ExportUtils.B(comp.active)},");
+                
+                var fields = comp.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance);
+                var fList = new System.Collections.Generic.List<string>();
+                foreach (var f in fields)
+                {
+                    if (typeof(VolumeParameter).IsAssignableFrom(f.FieldType))
+                    {
+                        var param = f.GetValue(comp) as VolumeParameter;
+                        object valObj = null;
+
+                        if (param != null)
+                        {
+                            var pType = param.GetType();
+                            var vProp = pType.GetProperty("value");
+                            var vField = pType.GetField("value");
+                            
+                            if (vProp != null) valObj = vProp.GetValue(param);
+                            else if (vField != null) valObj = vField.GetValue(param);
+                        }
+
+                        var valStr = valObj?.ToString() ?? "null";
+                        
+                        if (valObj is bool b) valStr = ExportUtils.B(b);
+                        else if (valObj is float fl) valStr = ExportUtils.F(fl);
+                        else if (valObj is Color c) valStr = ExportUtils.ColorJson(c);
+                        else if (valObj is int iVal) valStr = iVal.ToString();
+                        
+                        fList.Add($"    \"{f.Name}\": \"{ExportUtils.Esc(valStr)}\"");
+                    }
+                }
+                sb.AppendLine(string.Join(",\n", fList));
+                sb.AppendLine($"  }}{comma}");
+            }
+            sb.AppendLine("}");
+
+            File.WriteAllText(Path.Combine(ctx.EnsureDir(ModuleName), $"postprocess_{volume.gameObject.name}.json"), sb.ToString(), Encoding.UTF8);
+        }
+        Debug.Log($"[PPExporter] {volumes.Length} volumes exportados.");
+    }
+}
+#endif
