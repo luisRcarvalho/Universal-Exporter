@@ -8,11 +8,11 @@ using UnityEngine;
 public class ScriptableObjectExporter : IExporter
 {
     public string ModuleName => "data";
-    public int Order => 10; // Executa logo no começo
+    public int Order => 10;
 
     public void ExportScene(UnityEngine.SceneManagement.Scene scene, ExportContext ctx) 
     { 
-        // SOs são do projeto, não da cena. Deixamos vazio.
+        
     }
 
     public void ExportProject(ExportContext ctx)
@@ -36,6 +36,8 @@ public class ScriptableObjectExporter : IExporter
 
     bool ShouldSkipNamespace(ScriptableObject so)
     {
+        if (so.GetType().Name == "ExportProfile") return true;
+        
         var ns = so.GetType().Namespace ?? "";
         return ns.StartsWith("Unity") || ns.StartsWith("TMPro") || ns.StartsWith("Cinemachine");
     }
@@ -44,8 +46,7 @@ public class ScriptableObjectExporter : IExporter
     {
         var jsonBase = EditorJsonUtility.ToJson(so);
         var dict = new Dictionary<string, string>();
-
-        // Usamos reflection para pegar assets (áudios, prefabs, etc.) e registrar no AssetTracker
+        
         var fields = so.GetType().GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
         foreach (var f in fields)
         {
@@ -63,8 +64,7 @@ public class ScriptableObjectExporter : IExporter
                 }
             }
         }
-
-        // Limpeza simples do JSON Base e injeção do dicionário
+        
         var finalJson = InjectDictIntoJson(jsonBase, dict, so.GetType().Name);
         File.WriteAllText(Path.Combine(outDir, so.name + ".json"), finalJson);
         return true;
@@ -72,7 +72,6 @@ public class ScriptableObjectExporter : IExporter
 
     string InjectDictIntoJson(string baseJson, Dictionary<string, string> resolvedAssets, string typeName)
     {
-        // Remove a última chave '}'
         var trimmed = baseJson.Trim();
         if (trimmed.EndsWith("}")) trimmed = trimmed.Substring(0, trimmed.Length - 1);
 
