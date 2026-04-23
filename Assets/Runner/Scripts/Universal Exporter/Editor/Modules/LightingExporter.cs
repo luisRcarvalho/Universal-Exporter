@@ -4,15 +4,16 @@ using System.Text;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using System.Threading.Tasks;
 
 public class LightingExporter : IExporter
 {
     public string ModuleName => "lighting";
     public int Order => 50;
 
-    public void ExportProject(ExportContext ctx) { }
+    public async Task ExportProject(ExportContext ctx) {await Task.CompletedTask; }
 
-    public void ExportScene(Scene scene, ExportContext ctx)
+    public async Task ExportScene(Scene scene, ExportContext ctx)
     {
         var lights = UnityEngine.Object.FindObjectsByType<Light>(FindObjectsSortMode.None);
         var probes = UnityEngine.Object.FindObjectsByType<ReflectionProbe>(FindObjectsSortMode.None);
@@ -43,6 +44,7 @@ public class LightingExporter : IExporter
         sb.AppendLine("}");
 
         File.WriteAllText(Path.Combine(ctx.EnsureDir(ModuleName), $"lighting_{scene.name}.json"), sb.ToString(), Encoding.UTF8);
+        await Task.CompletedTask;
     }
 }
 #endif

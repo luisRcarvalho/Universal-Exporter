@@ -490,19 +490,60 @@ function renderOverview(){const m=state.manifest;showTab('overview',!!m);if(!m)r
  document.getElementById('overview-stats').innerHTML=[statCard(m.exportVersion||'—','Versão Export'),statCard(m.scope||'—','Escopo'),statCard(m.unityVersion||'—','Unity'),statCard(m.rawAssets?.registered||0,'Assets'),statCard(m.files?.length||0,'Arquivos')].join('');
  document.getElementById('overview-cards').innerHTML=card('Manifesto','<table class="kv-table">'+kv('Projeto',m.projectName||'—')+kv('Exportado em',m.exportedAt||'—')+kv('Versão',m.exportVersion||'—')+kv('Escopo',m.scope||'—')+kv('Unity',m.unityVersion||'—')+kv('glTFast',m.gltfastInstalled?badge('Instalado','green'):badge('Não','red'))+'</table>');}
 
-function renderHierarchy(){const h=state.hierarchy;showTab('hierarchy',!!h);if(!h)return;
- const objs=h.rootObjects||h.gameObjects||[];
- document.getElementById('hierarchy-subtitle').textContent=objs.length+'objeto(s) raiz';
- document.getElementById('hierarchy-stats').innerHTML=[statCard(h.rootObjectCount||objs.length,'Root Objects'),statCard(h.totalObjectCount||'—','Total Objects')].join('');
- document.getElementById('hierarchy-cards').innerHTML=objs.slice(0,50).map(obj=>{
- const comps=(obj.components||[]).map(c=>badge(c.type||c,'gray')).join('');
- return card(''+(obj.name||'?'),'<table class="kv-table">'+kv('Tag',obj.tag||'—')+kv('Layer',obj.layer||'—')+kv('Active',obj.active!==undefined?(obj.active?badge('true','green'):badge('false','gray')):'—')+kv('Componentes',comps||'—')+'</table>');
- }).join('')+(objs.length>50?'<div style="color:var(--text-faint);font-size:11px;padding:8px">... e mais '+(objs.length-50)+'objetos</div>':'');}
+function buildTreeHtml(node) {
+    let comps = Object.keys(node.components||{}).map(c => badge(c, 'gray')).join(' ');
+ 
+    let html = `<details style="margin-bottom: 4px;">
+                <summary style="cursor:pointer; background:var(--bg-hover); padding:4px; border-radius:4px; font-weight:bold;">
+                  ${node.name} ${comps}
+                </summary>`;
 
-function renderPhysics(){const p=state.physics;showTab('physics',!!p);if(!p)return;
- const g=p.global3D||{};document.getElementById('physics-subtitle').textContent='Configurações de Física';
- document.getElementById('physics-stats').innerHTML=[statCard(p.rigidbodies3D?.length||0,'Rigidbodies'),statCard(p.colliders3D?.length||0,'Colliders')].join('');
- document.getElementById('physics-cards').innerHTML=card('Física Global','<table class="kv-table">'+kv('Gravity',vec3(g.gravity))+kv('Contact Offset',f4(g.defaultContactOffset))+kv('Sleep Threshold',f4(g.sleepThreshold))+kv('Solver Iter.',g.defaultSolverIterations||'—')+'</table>');}
+    if(node.children && node.children.length > 0) {
+        html += `<div style="margin-left: 15px; border-left: 1px solid var(--border); padding-left: 10px; margin-top: 4px;">`;
+        node.children.forEach(c => html += buildTreeHtml(c));
+        html += `</div>`;
+    } else {
+        html += `<div style="margin-left: 15px; padding: 4px; color: var(--text-faint); font-size: 11px;">Sem filhos</div>`;
+    }
+    html += `</details>`;
+    return html;
+}
+
+function renderHierarchy(){
+    const h=state.hierarchy;
+    showTab('hierarchy',!!h);
+    if(!h)return;
+
+    const objs=h.gameObjects||[];
+    document.getElementById('hierarchy-subtitle').textContent=objs.length+' objeto(s) raiz';
+    document.getElementById('hierarchy-stats').innerHTML=statCard(objs.length,'Root Objects');
+ 
+    document.getElementById('hierarchy-cards').innerHTML=objs.map(obj => buildTreeHtml(obj)).join('');
+}
+
+function renderPhysics(){
+ const p=state.physics;showTab('physics',!!p);if(!p)return;
+ const g=p.global3D||{};
+ document.getElementById('physics-subtitle').textContent='Física da Cena';
+
+ const rbs = p.rigidbodies3D||[];
+ const cols = p.colliders3D||[];
+ document.getElementById('physics-stats').innerHTML=[statCard(rbs.length,'Rigidbodies'),statCard(cols.length,'Colliders')].join('');
+
+ let html = card('Física Global','<table class="kv-table">'+kv('Gravity',vec3(g.gravity))+kv('Contact Offset',f4(g.defaultContactOffset))+kv('Sleep Threshold',f4(g.sleepThreshold))+'</table>');
+
+ if(rbs.length > 0) {
+  let rbList = rbs.map(rb => kv(rb.name, 'Mass: ' + f4(rb.mass))).join('');
+  html += card('Rigidbodies na Cena','<table class="kv-table">'+rbList+'</table>');
+ }
+
+ if(cols.length > 0) {
+  let colList = cols.map(c => kv(c.name, c.type)).join('');
+  html += card('Colliders na Cena','<table class="kv-table">'+colList+'</table>');
+ }
+
+ document.getElementById('physics-cards').innerHTML = html;
+}
 
 function renderLighting(){const l=state.lighting;showTab('lighting',!!l);if(!l)return;
  const lts=l.lights||[];document.getElementById('lighting-subtitle').textContent=lts.length+'luz(es)';
@@ -779,33 +820,53 @@ function buildParamsHtml(params){
  return`<div class="inspector-wrap"><div class="inspector-header">Parameters</div>${rows}</div>`;
 }
 
+function formatValue(val) {
+ if (val === null || val === undefined) return 'null';
+ if (typeof val !== 'object') return String(val);
+ 
+ if (val.__assetPath) return badge('Asset', 'blue') + ' <span style="font-size:10px; color:var(--text-faint)">' + val.__assetPath + '</span>';
+ 
+ if (Array.isArray(val)) {
+  if(val.length === 0) return '[]';
+  return '<div style="max-height:100px; overflow-y:auto; font-size:11px;">' + val.map(v => formatValue(v)).join('<br>') + '</div>';
+ }
+ 
+ let html = '<div style="margin-left: 10px; border-left: 1px solid var(--border); padding-left: 10px;">';
+ for(let k in val) {
+  if(k.startsWith('m_') && k !== 'm_Name') continue; // Esconde o lixo nativo da Unity
+  html += `<div style="margin-bottom:4px;"><strong>${k}:</strong> ${formatValue(val[k])}</div>`;
+ }
+ html += '</div>';
+ return html;
+}
+
 function renderScriptables(){
- const raw=state.scriptables;showTab('scriptables',raw.length>0);if(!raw.length)return;
- const allSOs=raw.flatMap(item=>normalizeScriptables(item));
- document.getElementById('scriptables-subtitle').textContent=allSOs.length+'objeto(s)';
- document.getElementById('scriptables-stats').innerHTML=statCard(allSOs.length,'ScriptableObjects');
- function inspVal(v){
- if(v===null||v===undefined)return '<span style="color:var(--text-faint)">null</span>';
- if(typeof v==='boolean')return v?'<span class="cb-on"></span>':'<span class="cb-off"></span>';
- if(typeof v==='number')return '<span style="color:#7dd3fc">'+f4(v)+'</span>';
- if(typeof v==='string')return '<span style="color:#86efac">&quot;'+v+'&quot;</span>';
- if(typeof v==='object'){
- if('r'in v&&'g'in v&&'b'in v)return colorSwatch(v);
- if('x'in v&&'y'in v&&'z'in v)return '<code style="font-size:10px">'+vec3(v)+'</code>';
- if('x'in v&&'y'in v)return '<code style="font-size:10px">X:'+f4(v.x)+'Y:'+f4(v.y)+'</code>';
- if(v.__assetPath)return '<span style="background:var(--bg-hover);padding:1px 6px;border-radius:3px;border:1px solid var(--border);font-size:10px"> '+v.__assetPath.split('/').pop()+'</span>';
- if(v.name||v.guid)return badge(v.name||v.guid,'purple');
- if(Array.isArray(v))return badge('Array['+v.length+']','blue');
- return '<code style="font-size:10px">{…}</code>';}
- return String(v);}
- document.getElementById('scriptables-cards').innerHTML=allSOs.map(so=>{
- const fields=so.fields||{},meta=so.meta||so._meta||null,soType=so.type||(meta&&meta.soType)||'ScriptableObject',assetPath=so.assetPath||'';
- const entries=Object.entries(fields).filter(([k])=>k!=='_meta');
- const scriptRow='<div class="inspector-script"><span class="inspector-label"style="color:var(--text-faint);font-size:11px">Script</span><span style="font-size:11px;color:var(--accent);font-weight:600">'+soType+'</span></div>';
- const fieldRows=entries.length?entries.map(([k,v])=>'<div class="inspector-row"><span class="inspector-label">'+k+'</span><span class="inspector-value">'+inspVal(v)+'</span></div>').join(''):'<div class="inspector-row"><span style="color:var(--text-faint);font-size:var(--text-xs)">Sem campos exportados</span></div>';
- const pathHtml=assetPath?'<div style="padding:2px var(--space-3);font-size:9px;color:var(--text-faint);border-top:1px solid var(--border)">'+assetPath+'</div>':'';
- return '<div class="inspector-wrap"><div class="inspector-header"style="font-size:var(--text-sm);text-transform:none;letter-spacing:0"> '+(so.name||soType)+'</div>'+scriptRow+fieldRows+pathHtml+'</div>';
- }).join('');}
+ const sos=state.scriptables;
+ showTab('scriptables',sos.length>0);
+ if(!sos.length)return;
+
+ document.getElementById('scriptables-subtitle').textContent=sos.length+' arquivo(s)';
+ document.getElementById('scriptables-stats').innerHTML=statCard(sos.length,'Instâncias SO');
+
+ let html = '';
+ sos.forEach(so => {
+  let typeName = so._meta?.soType || 'ScriptableObject';
+  let rows = '';
+  
+  let targetObj = so.MonoBehaviour ? so.MonoBehaviour : so;
+
+  for(let key in targetObj) {
+   if(key.startsWith('m_') && key !== 'm_Name') continue;
+   if(key === '_meta') continue;
+
+   rows += kv(key, formatValue(targetObj[key]));
+  }
+
+  html += card(typeName, '<table class="kv-table">' + rows + '</table>');
+ });
+
+ document.getElementById('scriptables-cards').innerHTML = html;
+}
 
 function renderProjectSettings(){
  const ps=state.projectsettings;const hasData=Object.keys(ps).length>0;showTab('projectsettings',hasData);if(!hasData)return;

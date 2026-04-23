@@ -5,15 +5,16 @@ using System.Text;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using System.Threading.Tasks;
 
 public class MaterialExporter : IExporter
 {
     public string ModuleName => "materials";
     public int Order => 40;
 
-    public void ExportProject(ExportContext ctx) { }
+    public async Task ExportProject(ExportContext ctx) {await Task.CompletedTask; }
 
-    public void ExportScene(Scene scene, ExportContext ctx)
+    public async Task ExportScene(Scene scene, ExportContext ctx)
     {
         var renderers = UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None);
         var materialsMap = new Dictionary<string, Material>();
@@ -51,6 +52,7 @@ public class MaterialExporter : IExporter
         sb.AppendLine("}");
 
         File.WriteAllText(Path.Combine(ctx.EnsureDir(ModuleName), $"materials_{scene.name}.json"), sb.ToString(), Encoding.UTF8);
+        await Task.CompletedTask;
     }
 }
 #endif

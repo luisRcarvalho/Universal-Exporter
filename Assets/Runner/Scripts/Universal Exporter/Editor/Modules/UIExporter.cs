@@ -5,15 +5,16 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using System.Threading.Tasks;
 
 public class UIExporter : IExporter
 {
     public string ModuleName => "ui";
     public int Order => 80;
 
-    public void ExportProject(ExportContext ctx) { }
+    public async Task ExportProject(ExportContext ctx) {await Task.CompletedTask; }
 
-    public void ExportScene(Scene scene, ExportContext ctx)
+    public async Task ExportScene(Scene scene, ExportContext ctx)
     {
         var canvases = UnityEngine.Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None);
         var roots = new List<Canvas>();
@@ -38,6 +39,7 @@ public class UIExporter : IExporter
 
         File.WriteAllText(Path.Combine(ctx.EnsureDir(ModuleName), $"ui_{scene.name}.json"), sb.ToString(), Encoding.UTF8);
         Debug.Log($"[UIExporter] {roots.Count} Canvas raízes exportados.");
+        await Task.CompletedTask;
     }
 
     string SerializeElement(GameObject go, int indent, ExportContext ctx)

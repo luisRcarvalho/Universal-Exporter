@@ -5,15 +5,16 @@ using System.Text;
 using UnityEditor.Animations;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using System.Threading.Tasks;
 
 public class AnimatorControllerExporter : IExporter
 {
     public string ModuleName => "animation";
     public int Order => 35; 
 
-    public void ExportProject(ExportContext ctx) { }
+    public async Task ExportProject(ExportContext ctx) { await Task.CompletedTask;}
 
-    public void ExportScene(Scene scene, ExportContext ctx)
+    public async Task ExportScene(Scene scene, ExportContext ctx)
     {
         var animators = Object.FindObjectsByType<Animator>(FindObjectsSortMode.None);
         var exported = new HashSet<string>();
@@ -29,7 +30,10 @@ public class AnimatorControllerExporter : IExporter
         }
 
         if (count > 0)
+        {
             Debug.Log($"[AnimExporter] {count} controller(s) exportado(s).");
+        }
+        await Task.CompletedTask;
     }
 
     void ExportController(AnimatorController ctrl, string outDir)

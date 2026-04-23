@@ -42,129 +42,163 @@ public static class MasterExporter
         return list.OrderBy(e => e.Order).ToList();
     }
 
-    public static async Task RunExport(ExportScope scope, List<IExporter> selectedExporters)
+   public static async Task RunExport(ExportScope scope, List<IExporter> selectedExporters)
     {
-        string destFolder = EditorUtility.SaveFolderPanel("Escolha onde salvar a exportação", "", "");
-        
-        if (string.IsNullOrEmpty(destFolder))
-        {
-            Debug.Log("[Universal Exporter] Exportação cancelada pelo usuário.");
-            return;
-        }
+        string stagingDir = Path.Combine(Application.temporaryCachePath, "UniversalExport_Staging");
+        if (Directory.Exists(stagingDir)) Directory.Delete(stagingDir, true);
+        Directory.CreateDirectory(stagingDir);
 
-        var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        var scopeLabel = scope == ExportScope.CurrentScene ? "scene" : "project";
-        
-        var stagingDir = Path.Combine(Path.GetTempPath(), $"universal_export_{scopeLabel}_{timestamp}");
         var context = new ExportContext(scope, stagingDir);
+        string timestamp = System.DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        
+        var originalScenePath = EditorSceneManager.GetActiveScene().path;
 
         try
         {
-            Progress(0.0f, "Iniciando pipeline sólida...");
+            var projectExporters = selectedExporters.Where(e => e.Order < 50).OrderBy(e => e.Order).ToList();
+            foreach (var exp in projectExporters)
+            {
+                Progress(0.1f, $"Projeto: {exp.ModuleName}...");
+                await exp.ExportProject(context);
+            }
+            
+            var sceneExporters = selectedExporters.Where(e => e.Order >= 50).OrderBy(e => e.Order).ToList();
+            var scenesToExport = new List<string>();
 
             if (scope == ExportScope.CurrentScene)
             {
-                var scene = SceneManager.GetActiveScene();
-                RunProjectExporters(selectedExporters, context);
-                RunSceneExporters(selectedExporters, scene, context);
-                await ExportGltf(scene, context.EnsureDir("gltf"));
+                scenesToExport.Add(originalScenePath);
             }
             else
             {
-                RunProjectExporters(selectedExporters, context);
-                await ExportMultipleScenes(selectedExporters, context);
+                foreach (var s in EditorBuildSettings.scenes)
+                    if (s.enabled) scenesToExport.Add(s.path);
             }
-
-            Progress(0.85f, $"Copiando assets brutos ({context.Assets.Registered})...");
+            
+            float step = 0.7f / Mathf.Max(1, scenesToExport.Count);
+            for (int i = 0; i < scenesToExport.Count; i++)
+            {
+                var path = scenesToExport[i];
+                if (string.IsNullOrEmpty(path)) continue;
+                
+                var scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+                Progress(0.2f + (i * step), $"Processando Cena: {scene.name}...");
+                
+                await RunSceneExporters(sceneExporters, scene, context);
+            }
+            
+            Progress(0.85f, "Resolvendo dependências e copiando assets...");
+            context.Assets.ResolveDependencies();
             context.Assets.CopyAllTo(stagingDir);
 
-            Progress(0.90f, "Gerando manifesto...");
             WriteManifest(context, timestamp, scope);
-            
-            Progress(0.92f, "Gerando HTML Report...");
-            HtmlReportGenerator.Generate(stagingDir, destFolder);
-            
-            Progress(0.96f, "Comprimindo ZIP...");
-            var zipPath = Path.Combine(destFolder, $"universal_export_{scopeLabel}_{timestamp}.zip");
-            ZipFile.CreateFromDirectory(stagingDir, zipPath);
 
-            Debug.Log($"[Universal Exporter] ✓ Arquivos salvos com sucesso em: {destFolder}");
+            Progress(0.95f, "Gerando pacotes finais...");
+            string zipPath = EditorUtility.SaveFilePanel("Salvar Exportação", "", $"Export_{timestamp}", "zip");
             
-            EditorUtility.RevealInFinder(zipPath);
+            if (!string.IsNullOrEmpty(zipPath))
+            {
+                if (File.Exists(zipPath)) File.Delete(zipPath);
+                ZipFile.CreateFromDirectory(stagingDir, zipPath);
+                
+                string htmlPath = zipPath.Replace(".zip", ".html");
+                GenerateHtmlReport(stagingDir, htmlPath);
+
+                Debug.Log($"[Universal Exporter] Exportação completa! {scenesToExport.Count} cenas processadas.");
+                EditorUtility.RevealInFinder(zipPath);
+            }
         }
         catch (Exception e)
         {
-            Debug.LogError($"[Universal Exporter] Erro: {e}");
-            EditorUtility.DisplayDialog("Erro Fatal", e.Message, "OK");
+            Debug.LogError($"[Universal Exporter] Erro: {e.Message}");
         }
         finally
         {
+            if (EditorSceneManager.GetActiveScene().path != originalScenePath)
+                EditorSceneManager.OpenScene(originalScenePath);
+                
             EditorUtility.ClearProgressBar();
-            
-            if (Directory.Exists(stagingDir)) 
-                Directory.Delete(stagingDir, true);
         }
     }
-
-    static void RunProjectExporters(List<IExporter> exporters, ExportContext ctx)
+    
+    static async Task RunSceneExporters(List<IExporter> exporters, Scene scene, ExportContext ctx)
     {
-        foreach (var exporter in exporters)
-        {
-            Progress(0.1f, $"Global: {exporter.ModuleName}...");
-            exporter.ExportProject(ctx);
-        }
-    }
+        if (!string.IsNullOrEmpty(scene.path)) ctx.TrackAsset(scene.path);
 
-    static void RunSceneExporters(List<IExporter> exporters, Scene scene, ExportContext ctx)
-    {
         foreach (var exporter in exporters)
         {
             Progress(0.3f, $"Cena {scene.name}: {exporter.ModuleName}...");
-            exporter.ExportScene(scene, ctx);
+            await exporter.ExportScene(scene, ctx);
         }
     }
-
-    static async Task ExportMultipleScenes(List<IExporter> exporters, ExportContext ctx)
-    {
-        var scenes = EditorBuildSettings.scenes.Where(s => s.enabled).Select(s => s.path).ToList();
-        if (scenes.Count == 0) scenes.Add(SceneManager.GetActiveScene().path);
-
-        foreach (var path in scenes)
-        {
-            if (SceneManager.GetActiveScene().path != path)
-                EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
-
-            var scene = SceneManager.GetActiveScene();
-            
-            var sceneSubDir = Path.Combine(ctx.StagingDir, "scenes", scene.name);
-            var subContext = new ExportContext(ctx.Scope, sceneSubDir);
-
-            RunSceneExporters(exporters, scene, subContext);
-            await ExportGltf(scene, subContext.EnsureDir("gltf"));
-        }
-    }
-
-    static async Task ExportGltf(Scene scene, string outDir)
-    {
-#if GLTFAST_INSTALLED
-        var settings = new ExportSettings { Format = GltfFormat.Binary, FileConflictResolution = FileConflictResolution.Overwrite };
-        var exporter = new GameObjectExport(settings);
-        exporter.AddScene(scene.GetRootGameObjects(), scene.name);
-        await exporter.SaveToFileAndDispose(Path.Combine(outDir, $"{scene.name}.glb"));
-#else
-        Debug.LogWarning("[Universal Exporter] glTFast não instalado. Pulo do GLB.");
-        await Task.CompletedTask;
-#endif
-    }
-
+    
     static void WriteManifest(ExportContext ctx, string timestamp, ExportScope scope)
     {
+        bool hasGltFast = false;
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            if (assembly.GetName().Name.IndexOf("gltfast", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                hasGltFast = true;
+                break;
+            }
+        }
+
         var sb = new StringBuilder();
         sb.AppendLine("{");
+        sb.AppendLine($"  \"projectName\": \"{ExportUtils.Esc(PlayerSettings.productName)}\",");
         sb.AppendLine($"  \"exportVersion\": \"{VERSION}\",");
-        sb.AppendLine($"  \"scope\": \"{scope}\"");
+        sb.AppendLine($"  \"unityVersion\": \"{Application.unityVersion}\",");
+        sb.AppendLine($"  \"scope\": \"{scope}\",");
+        sb.AppendLine($"  \"exportedAt\": \"{DateTime.Now.ToString("dd/MM/yyyy HH:mm")}\",");
+        sb.AppendLine($"  \"gltfastInstalled\": {ExportUtils.B(hasGltFast)},");
+        
+        sb.AppendLine($"  \"rawAssets\": {{ \"registered\": {ctx.Assets.Registered}, \"copied\": {ctx.Assets.Copied}, \"skipped\": {ctx.Assets.Skipped} }}");
         sb.AppendLine("}");
+
         File.WriteAllText(Path.Combine(ctx.StagingDir, "export_manifest.json"), sb.ToString(), Encoding.UTF8);
+    }
+    
+    static void GenerateHtmlReport(string stagingDir, string finalHtmlPath)
+    {
+        string[] guids = UnityEditor.AssetDatabase.FindAssets("unity-inspector");
+        if (guids.Length == 0)
+        {
+            Debug.LogError("[Universal Exporter] Template 'unity-inspector.html' não encontrado no projeto! O relatório não foi gerado.");
+            return;
+        }
+
+        string templatePath = UnityEditor.AssetDatabase.GUIDToAssetPath(guids[0]);
+        string htmlContent = File.ReadAllText(templatePath);
+        
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("<script>");
+        sb.AppendLine("const EXPORT_DATA = { files: [");
+
+        string[] jsonFiles = Directory.GetFiles(stagingDir, "*.json", SearchOption.AllDirectories);
+        for (int i = 0; i < jsonFiles.Length; i++)
+        {
+            string fileName = Path.GetFileName(jsonFiles[i]);
+            byte[] fileBytes = File.ReadAllBytes(jsonFiles[i]);
+            string base64 = System.Convert.ToBase64String(fileBytes);
+            
+            string comma = i < jsonFiles.Length - 1 ? "," : "";
+            sb.AppendLine($"  {{ name: \"{fileName}\", content: \"{base64}\" }}{comma}");
+        }
+
+        sb.AppendLine("] };");
+        sb.AppendLine("</script>");
+
+        if (htmlContent.Contains("</head>"))
+        {
+            htmlContent = htmlContent.Replace("</head>", sb.ToString() + "</head>");
+        }
+        else
+        {
+            htmlContent += sb.ToString();
+        }
+        
+        File.WriteAllText(finalHtmlPath, htmlContent, System.Text.Encoding.UTF8);
     }
 
     static void Progress(float t, string msg) => EditorUtility.DisplayProgressBar("Universal Exporter", msg, t);

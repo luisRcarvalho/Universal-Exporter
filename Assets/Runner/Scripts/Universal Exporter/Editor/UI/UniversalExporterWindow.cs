@@ -27,9 +27,10 @@ public class UniversalExporterWindow : EditorWindow
     }
 
     void OnGUI()
-    {
+    { 
         EditorGUI.DrawRect(new Rect(0, 0, position.width, 54), new Color(0.13f, 0.14f, 0.18f));
-        GUI.Label(new Rect(0, 8, position.width, 24), "Universal Exporter", new GUIStyle(EditorStyles.boldLabel) { fontSize = 14, alignment = TextAnchor.MiddleCenter, normal = new GUIStyleState { textColor = Color.white } });
+        
+        GUI.Label(new Rect(0, 8, position.width, 38), "Universal Exporter", new GUIStyle(EditorStyles.boldLabel) { fontSize = 16, alignment = TextAnchor.MiddleCenter, normal = new GUIStyleState { textColor = Color.white } });
 
         GUILayout.Space(60);
         
@@ -39,15 +40,9 @@ public class UniversalExporterWindow : EditorWindow
         EditorGUI.BeginChangeCheck();
         _currentProfile = (ExportProfile)EditorGUILayout.ObjectField("Usar Preset:", _currentProfile, typeof(ExportProfile), false);
         
-        if (EditorGUI.EndChangeCheck() && _currentProfile != null)
-        {
-            ApplyProfile(_currentProfile);
-        }
+        if (EditorGUI.EndChangeCheck() && _currentProfile != null) ApplyProfile(_currentProfile);
 
-        if (GUILayout.Button("Salvar Marcações Atuais como Preset"))
-        {
-            CreateAndSaveProfile();
-        }
+        if (GUILayout.Button("Salvar Marcações Atuais como Preset")) CreateAndSaveProfile();
         GUILayout.EndVertical();
         GUILayout.Space(10);
 
@@ -62,9 +57,13 @@ public class UniversalExporterWindow : EditorWindow
         foreach (var exporter in _availableExporters)
         {
             EditorGUI.BeginChangeCheck();
-            _toggles[exporter] = EditorGUILayout.ToggleLeft($"Exportar {exporter.ModuleName.ToUpper()}", _toggles[exporter]);
             
-            if (EditorGUI.EndChangeCheck()) _currentProfile = null; 
+            string rawName = exporter.ModuleName.Replace("_", " ").ToLower();
+            string displayName = System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(rawName);
+
+            _toggles[exporter] = EditorGUILayout.ToggleLeft($"Exportar {displayName}", _toggles[exporter]);
+            
+            if (EditorGUI.EndChangeCheck()) _currentProfile = null;
         }
 
         EditorGUILayout.EndScrollView();

@@ -4,15 +4,16 @@ using System.Reflection;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Rendering;
+using System.Threading.Tasks;
 
 public class PostProcessingVolumeExporter : IExporter
 {
     public string ModuleName => "postprocessing";
     public int Order => 30;
 
-    public void ExportProject(ExportContext ctx) { }
+    public async Task ExportProject(ExportContext ctx) {await Task.CompletedTask; }
 
-    public void ExportScene(UnityEngine.SceneManagement.Scene scene, ExportContext ctx)
+    public async Task ExportScene(UnityEngine.SceneManagement.Scene scene, ExportContext ctx)
     {
         var volumes = Object.FindObjectsByType<Volume>(FindObjectsSortMode.None);
         if (volumes.Length == 0) return;
@@ -72,6 +73,7 @@ public class PostProcessingVolumeExporter : IExporter
             File.WriteAllText(Path.Combine(ctx.EnsureDir(ModuleName), $"postprocess_{volume.gameObject.name}.json"), sb.ToString(), Encoding.UTF8);
         }
         Debug.Log($"[PPExporter] {volumes.Length} volumes exportados.");
+        await Task.CompletedTask;
     }
 }
 #endif
