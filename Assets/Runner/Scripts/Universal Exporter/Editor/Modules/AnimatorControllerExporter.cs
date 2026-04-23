@@ -2,17 +2,17 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using UnityEditor.Animations;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using System.Threading.Tasks;
 
 public class AnimatorControllerExporter : IExporter
 {
     public string ModuleName => "animation";
-    public int Order => 35; 
+    public int Order => 53; // CORRIGIDO!
 
-    public async Task ExportProject(ExportContext ctx) { await Task.CompletedTask;}
+    public async Task ExportProject(ExportContext ctx) { await Task.CompletedTask; }
 
     public async Task ExportScene(Scene scene, ExportContext ctx)
     {
@@ -36,7 +36,7 @@ public class AnimatorControllerExporter : IExporter
         await Task.CompletedTask;
     }
 
-    void ExportController(AnimatorController ctrl, string outDir)
+    private void ExportController(AnimatorController ctrl, string outDir)
     {
         var sb = new StringBuilder();
         sb.AppendLine("{");
@@ -100,7 +100,7 @@ public class AnimatorControllerExporter : IExporter
         File.WriteAllText(Path.Combine(outDir, $"AnimatorController_{ctrl.name}.json"), sb.ToString(), Encoding.UTF8);
     }
 
-    string SerializeConditions(AnimatorCondition[] conds)
+    private string SerializeConditions(AnimatorCondition[] conds)
     {
         var parts = new List<string>();
         foreach (var c in conds)
@@ -110,7 +110,7 @@ public class AnimatorControllerExporter : IExporter
         return string.Join(", ", parts);
     }
 
-    string GetDefaultValue(AnimatorControllerParameter p)
+    private string GetDefaultValue(AnimatorControllerParameter p)
     {
         switch (p.type)
         {

@@ -1,16 +1,16 @@
 #if UNITY_EDITOR
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using System.Threading.Tasks;
 
 public class PhysicsExporter : IExporter
 {
     public string ModuleName => "physics";
-    public int Order => 30;
+    public int Order => 51; // CORRIGIDO: Agora o Gerente sabe que é de Cena!
 
-    public async Task ExportProject(ExportContext ctx) {await Task.CompletedTask; }
+    public async Task ExportProject(ExportContext ctx) { await Task.CompletedTask; }
 
     public async Task ExportScene(Scene scene, ExportContext ctx)
     {

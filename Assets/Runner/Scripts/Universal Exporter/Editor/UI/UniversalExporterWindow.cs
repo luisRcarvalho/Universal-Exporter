@@ -1,117 +1,234 @@
 #if UNITY_EDITOR
+using UnityEngine;
+using UnityEditor;
+using UnityEditor.SceneManagement;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEditor;
-using UnityEngine;
+using System.IO;
+
+public class ExportProfile : ScriptableObject
+{
+    public List<string> ActiveModules = new List<string>();
+}
 
 public class UniversalExporterWindow : EditorWindow
 {
-    List<IExporter> _availableExporters;
-    Dictionary<IExporter, bool> _toggles;
-    Vector2 _scroll;
-    ExportProfile _currentProfile; // Guarda o Preset atual
+    private Vector2 _mainScroll;
+    private List<IExporter> _allExporters = new List<IExporter>();
+    private Dictionary<IExporter, bool> _exporterSelection = new Dictionary<IExporter, bool>();
+    private Dictionary<string, bool> _sceneSelection = new Dictionary<string, bool>();
+    private ExportProfile _selectedProfile;
 
-    [MenuItem("Tools/Universal Exporter", priority = 0)]
-    public static void Open()
+    [MenuItem("Tools/Universal Exporter")]
+    public static void ShowWindow()
     {
-        var win = GetWindow<UniversalExporterWindow>(false, "Universal Exporter", true);
-        win.minSize = new Vector2(300, 450);
-        win.Show();
+        var window = GetWindow<UniversalExporterWindow>("Universal Exporter");
+        window.minSize = new Vector2(400, 500);
+        window.Show();
     }
 
-    void OnEnable()
+    private void OnEnable()
     {
-        _availableExporters = MasterExporter.GetActiveExporters();
-        _toggles = _availableExporters.ToDictionary(e => e, e => true);
+        LoadExporters();
+        LoadScenesFromBuild();
     }
 
-    void OnGUI()
-    { 
-        EditorGUI.DrawRect(new Rect(0, 0, position.width, 54), new Color(0.13f, 0.14f, 0.18f));
-        
-        GUI.Label(new Rect(0, 8, position.width, 38), "Universal Exporter", new GUIStyle(EditorStyles.boldLabel) { fontSize = 16, alignment = TextAnchor.MiddleCenter, normal = new GUIStyleState { textColor = Color.white } });
+    private void LoadExporters()
+    {
+        _allExporters.Clear();
+        _exporterSelection.Clear();
 
-        GUILayout.Space(60);
-        
-        GUILayout.BeginVertical("box");
+        var types = TypeCache.GetTypesDerivedFrom<IExporter>();
+        foreach (var t in types)
+        {
+            if (!t.IsAbstract && !t.IsInterface)
+            {
+                var exporter = (IExporter)Activator.CreateInstance(t);
+                _allExporters.Add(exporter);
+            }
+        }
+
+        _allExporters = _allExporters.OrderBy(e => e.Order).ToList();
+        foreach (var exp in _allExporters) _exporterSelection[exp] = true;
+    }
+
+    private void LoadScenesFromBuild()
+    {
+        _sceneSelection.Clear();
+        foreach (var scene in EditorBuildSettings.scenes)
+        {
+            if (scene.enabled) _sceneSelection[scene.path] = true;
+        }
+    }
+
+    private string FormatName(string rawName)
+    {
+        if (string.IsNullOrEmpty(rawName)) return rawName;
+        var words = rawName.Split(new[] { '_' }, StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < words.Length; i++)
+        {
+            if (words[i].Length > 0)
+                words[i] = char.ToUpper(words[i][0]) + words[i].Substring(1).ToLower();
+        }
+        return string.Join(" ", words);
+    }
+
+    private void OnGUI()
+    {
+        GUIStyle titleStyle = new GUIStyle(EditorStyles.boldLabel)
+        {
+            fontSize = 16,
+            alignment = TextAnchor.MiddleCenter,
+            margin = new RectOffset(10, 10, 15, 15)
+        };
+
+        _mainScroll = EditorGUILayout.BeginScrollView(_mainScroll);
+
+        GUILayout.Label("Universal Exporter", titleStyle);
+        EditorGUILayout.Space(5);
+
+        DrawPresetsSection();
+        EditorGUILayout.Space(5);
+        DrawExportersSection();
+        EditorGUILayout.Space(15);
+        DrawScenesSection();
+
+        EditorGUILayout.EndScrollView();
+
+        DrawSeparator();
+        DrawExportButtons();
+    }
+
+    private void DrawPresetsSection()
+    {
         GUILayout.Label("Predefinições de Exportação (Presets)", EditorStyles.boldLabel);
         
         EditorGUI.BeginChangeCheck();
-        _currentProfile = (ExportProfile)EditorGUILayout.ObjectField("Usar Preset:", _currentProfile, typeof(ExportProfile), false);
-        
-        if (EditorGUI.EndChangeCheck() && _currentProfile != null) ApplyProfile(_currentProfile);
+        _selectedProfile = (ExportProfile)EditorGUILayout.ObjectField("Usar Preset:", _selectedProfile, typeof(ExportProfile), false);
+        if (EditorGUI.EndChangeCheck() && _selectedProfile != null)
+        {
+            ApplyPreset(_selectedProfile);
+        }
 
-        if (GUILayout.Button("Salvar Marcações Atuais como Preset")) CreateAndSaveProfile();
-        GUILayout.EndVertical();
-        GUILayout.Space(10);
+        if (GUILayout.Button("Salvar Marcações Atuais como Preset"))
+        {
+            SaveCurrentAsPreset();
+        }
+    }
 
+    private void DrawExportersSection()
+    {
+        EditorGUILayout.Space(5);
         GUILayout.BeginHorizontal();
-        if (GUILayout.Button("Selecionar Tudo")) SetAll(true);
-        if (GUILayout.Button("Desmarcar Tudo")) SetAll(false);
+        if (GUILayout.Button("Selecionar Tudo"))
+        {
+            foreach (var key in _exporterSelection.Keys.ToList()) _exporterSelection[key] = true;
+        }
+        if (GUILayout.Button("Desmarcar Tudo"))
+        {
+            foreach (var key in _exporterSelection.Keys.ToList()) _exporterSelection[key] = false;
+        }
         GUILayout.EndHorizontal();
 
-        GUILayout.Space(10);
-        _scroll = EditorGUILayout.BeginScrollView(_scroll, "box");
+        EditorGUILayout.Space(5);
 
-        foreach (var exporter in _availableExporters)
+        foreach (var exp in _allExporters)
         {
-            EditorGUI.BeginChangeCheck();
-            
-            string rawName = exporter.ModuleName.Replace("_", " ").ToLower();
-            string displayName = System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(rawName);
-
-            _toggles[exporter] = EditorGUILayout.ToggleLeft($"Exportar {displayName}", _toggles[exporter]);
-            
-            if (EditorGUI.EndChangeCheck()) _currentProfile = null;
+            string displayName = $"Exportar {FormatName(exp.ModuleName)}";
+            _exporterSelection[exp] = EditorGUILayout.ToggleLeft(displayName, _exporterSelection[exp]);
         }
+    }
 
-        EditorGUILayout.EndScrollView();
-        GUILayout.Space(10);
+    private void DrawScenesSection()
+    {
+        GUILayout.Label("Cenas para Exportar", EditorStyles.boldLabel);
+        
+        var paths = new List<string>(_sceneSelection.Keys);
+        if (paths.Count == 0) 
+        {
+            GUILayout.Label("Nenhuma cena ativada no Build Settings.");
+        }
+        else
+        {
+            foreach (var path in paths)
+            {
+                string sceneName = Path.GetFileNameWithoutExtension(path);
+                _sceneSelection[path] = EditorGUILayout.ToggleLeft(sceneName, _sceneSelection[path]);
+            }
+        }
+    }
 
-        var selected = _availableExporters.Where(e => _toggles[e]).ToList();
-        GUI.enabled = selected.Count > 0;
+    private void DrawExportButtons()
+    {
+        EditorGUILayout.Space(5);
 
         if (GUILayout.Button("Exportar Cena Atual (ZIP)", GUILayout.Height(30)))
-            _ = MasterExporter.RunExport(ExportScope.CurrentScene, selected);
+        {
+            string currentScene = EditorSceneManager.GetActiveScene().path;
+            StartExportProcess(ExportScope.CurrentScene, new List<string> { currentScene });
+        }
 
-        GUILayout.Space(5);
+        EditorGUILayout.Space(2);
 
         if (GUILayout.Button("Exportar Projeto Inteiro (ZIP)", GUILayout.Height(30)))
-            _ = MasterExporter.RunExport(ExportScope.FullProject, selected);
-
-        GUI.enabled = true;
-    }
-
-    void SetAll(bool state)
-    {
-        _currentProfile = null;
-        foreach (var key in _toggles.Keys.ToList())
-            _toggles[key] = state;
-    }
-
-    void ApplyProfile(ExportProfile profile)
-    {
-        if (profile == null) return;
-        foreach (var key in _toggles.Keys.ToList())
         {
-            _toggles[key] = profile.activeModules.Contains(key.ModuleName);
+            var activeScenes = _sceneSelection.Where(k => k.Value).Select(k => k.Key).ToList();
+            StartExportProcess(ExportScope.FullProject, activeScenes);
+        }
+        
+        EditorGUILayout.Space(5);
+    }
+
+    private void StartExportProcess(ExportScope scope, List<string> scenes)
+    {
+        var activeExporters = _exporterSelection.Where(k => k.Value).Select(k => k.Key).ToList();
+        
+        if (activeExporters.Count == 0)
+        {
+            Debug.LogWarning("[Universal Exporter] Nenhum módulo selecionado!");
+            return;
+        }
+        
+        if (scenes.Count == 0 && scope == ExportScope.FullProject)
+        {
+            Debug.LogWarning("[Universal Exporter] Nenhuma cena selecionada!");
+            return;
+        }
+
+        _ = MasterExporter.RunExport(scope, scenes, activeExporters);
+    }
+
+    private void ApplyPreset(ExportProfile profile)
+    {
+        foreach (var key in _exporterSelection.Keys.ToList()) _exporterSelection[key] = false;
+        foreach (var module in profile.ActiveModules)
+        {
+            var exporter = _allExporters.FirstOrDefault(e => e.ModuleName == module);
+            if (exporter != null) _exporterSelection[exporter] = true;
         }
     }
 
-    void CreateAndSaveProfile()
+    private void SaveCurrentAsPreset()
     {
-        var profile = ScriptableObject.CreateInstance<ExportProfile>();
-        profile.activeModules = _toggles.Where(kvp => kvp.Value).Select(kvp => kvp.Key.ModuleName).ToList();
+        string path = EditorUtility.SaveFilePanelInProject("Salvar Preset", "NovoPreset", "asset", "Salve o arquivo do perfil");
+        if (string.IsNullOrEmpty(path)) return;
 
-        string path = EditorUtility.SaveFilePanelInProject("Salvar Preset", "NovoPresetExportacao", "asset", "Escolha onde salvar o preset");
-        if (!string.IsNullOrEmpty(path))
-        {
-            AssetDatabase.CreateAsset(profile, path);
-            AssetDatabase.SaveAssets();
-            _currentProfile = profile;
-            Debug.Log($"[Universal Exporter] Preset salvo em: {path}");
-        }
+        var profile = CreateInstance<ExportProfile>();
+        profile.ActiveModules = _exporterSelection.Where(k => k.Value).Select(k => k.Key.ModuleName).ToList();
+
+        AssetDatabase.CreateAsset(profile, path);
+        AssetDatabase.SaveAssets();
+        _selectedProfile = profile;
+        Debug.Log($"[Universal Exporter] Preset salvo em: {path}");
+    }
+
+    private void DrawSeparator()
+    {
+        EditorGUILayout.Space();
+        Rect rect = EditorGUILayout.GetControlRect(false, 1);
+        EditorGUI.DrawRect(rect, new Color(0.3f, 0.3f, 0.3f, 1f));
+        EditorGUILayout.Space();
     }
 }
 #endif
