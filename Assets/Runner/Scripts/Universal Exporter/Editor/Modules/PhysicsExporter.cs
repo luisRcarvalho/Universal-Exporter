@@ -1,14 +1,14 @@
 #if UNITY_EDITOR
 using System.IO;
 using System.Text;
-using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using System.Threading.Tasks;
 
 public class PhysicsExporter : IExporter
 {
     public string ModuleName => "physics";
-    public int Order => 51; // CORRIGIDO: Agora o Gerente sabe que é de Cena!
+    public int Order => 51; // Garantindo que roda na cena!
 
     public async Task ExportProject(ExportContext ctx) { await Task.CompletedTask; }
 
@@ -29,7 +29,11 @@ public class PhysicsExporter : IExporter
         {
             var rb = rbs[i];
             var comma = i < rbs.Length - 1 ? "," : "";
-            sb.AppendLine($"    {{ \"name\": \"{ExportUtils.Esc(rb.gameObject.name)}\", \"mass\": {ExportUtils.F(rb.mass)}, \"isKinematic\": {ExportUtils.B(rb.isKinematic)}, \"useGravity\": {ExportUtils.B(rb.useGravity)} }}{comma}");
+            
+            // NOVO: Capturamos quem é o "Pai" desse objeto na Unity
+            string parentName = rb.transform.parent ? rb.transform.parent.name : "Scene Root";
+            
+            sb.AppendLine($"    {{ \"name\": \"{ExportUtils.Esc(rb.gameObject.name)}\", \"parent\": \"{ExportUtils.Esc(parentName)}\", \"mass\": {ExportUtils.F(rb.mass)}, \"isKinematic\": {ExportUtils.B(rb.isKinematic)}, \"useGravity\": {ExportUtils.B(rb.useGravity)} }}{comma}");
         }
         sb.AppendLine("  ],");
         
@@ -39,7 +43,11 @@ public class PhysicsExporter : IExporter
         {
             var col = colliders[i];
             var comma = i < colliders.Length - 1 ? "," : "";
-            sb.AppendLine($"    {{ \"name\": \"{ExportUtils.Esc(col.gameObject.name)}\", \"type\": \"{col.GetType().Name}\", \"isTrigger\": {ExportUtils.B(col.isTrigger)} }}{comma}");
+            
+            // NOVO: Fazemos o mesmo para os Colliders
+            string parentName = col.transform.parent ? col.transform.parent.name : "Scene Root";
+            
+            sb.AppendLine($"    {{ \"name\": \"{ExportUtils.Esc(col.gameObject.name)}\", \"parent\": \"{ExportUtils.Esc(parentName)}\", \"type\": \"{col.GetType().Name}\", \"isTrigger\": {ExportUtils.B(col.isTrigger)} }}{comma}");
         }
         sb.AppendLine("  ]");
         

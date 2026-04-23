@@ -161,22 +161,18 @@ public class UniversalExporterWindow : EditorWindow
 
     private void DrawExportButtons()
     {
-        EditorGUILayout.Space(5);
-
-        if (GUILayout.Button("Exportar Cena Atual (ZIP)", GUILayout.Height(30)))
-        {
-            string currentScene = EditorSceneManager.GetActiveScene().path;
-            StartExportProcess(ExportScope.CurrentScene, new List<string> { currentScene });
-        }
-
-        EditorGUILayout.Space(2);
-
-        if (GUILayout.Button("Exportar Projeto Inteiro (ZIP)", GUILayout.Height(30)))
+        GUILayout.Space(15);
+        
+        var oldColor = GUI.backgroundColor;
+        GUI.backgroundColor = new Color(0.15f, 0.55f, 1f); 
+        
+        if (GUILayout.Button("Exportar Seleção (ZIP)", GUILayout.Height(40)))
         {
             var activeScenes = _sceneSelection.Where(k => k.Value).Select(k => k.Key).ToList();
             StartExportProcess(ExportScope.FullProject, activeScenes);
         }
         
+        GUI.backgroundColor = oldColor;
         EditorGUILayout.Space(5);
     }
 

@@ -13,11 +13,7 @@ using UnityEngine.SceneManagement;
 
 public static class MasterExporter
 {
-    const string VERSION = "1.0.0";
-    private static void Progress(float p, string msg)
-    {
-        EditorUtility.DisplayProgressBar("Universal Exporter", msg, p);
-    }
+    private static void Progress(float p, string msg) => EditorUtility.DisplayProgressBar("Universal Exporter", msg, p);
 
     public static async Task RunExport(ExportScope scope, List<string> scenesToExport, List<IExporter> selectedExporters)
     {
@@ -31,15 +27,9 @@ public static class MasterExporter
 
         try
         {
-            // 1. Módulos de Projeto
             var projectExporters = selectedExporters.Where(e => e.Order < 50).OrderBy(e => e.Order).ToList();
-            foreach (var exp in projectExporters)
-            {
-                Progress(0.1f, $"Projeto: {exp.ModuleName}...");
-                await exp.ExportProject(context);
-            }
+            foreach (var exp in projectExporters) await exp.ExportProject(context);
 
-            // 2. Módulos de Cena
             var sceneExporters = selectedExporters.Where(e => e.Order >= 50).OrderBy(e => e.Order).ToList();
             float step = 0.6f / Mathf.Max(1, scenesToExport.Count);
 
@@ -49,36 +39,25 @@ public static class MasterExporter
                 if (string.IsNullOrEmpty(path)) continue;
 
                 var scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
-                Progress(0.2f + (i * step), $"Cena: {scene.name}...");
+                Progress(0.2f + (i * step), $"Processando Cena: {scene.name}...");
                 await RunSceneExporters(sceneExporters, scene, context);
             }
 
-            // 3. Finalização
-            Progress(0.85f, "Resolvendo dependências e assets brutos...");
             context.Assets.ResolveDependencies();
             context.Assets.CopyAllTo(stagingDir);
-
-            WriteManifest(context, timestamp, scope);
-
-            Progress(0.95f, "Gerando pacotes finais...");
-            string zipPath = EditorUtility.SaveFilePanel("Salvar Exportação", "", $"Export_{timestamp}", "zip");
             
+            WriteManifest(context, timestamp, scope, scenesToExport);
+
+            string zipPath = EditorUtility.SaveFilePanel("Salvar Exportação", "", $"Export_{timestamp}", "zip");
             if (!string.IsNullOrEmpty(zipPath))
             {
                 if (File.Exists(zipPath)) File.Delete(zipPath);
                 ZipFile.CreateFromDirectory(stagingDir, zipPath);
-                
-                string htmlPath = zipPath.Replace(".zip", ".html");
-                GenerateHtmlReport(stagingDir, htmlPath);
-
-                Debug.Log($"[Universal Exporter] SUCESSO! {scenesToExport.Count} cena(s) e {context.Assets.Copied} assets empacotados.");
+                GenerateHtmlReport(stagingDir, zipPath.Replace(".zip", ".html"));
                 EditorUtility.RevealInFinder(zipPath);
             }
         }
-        catch (Exception e)
-        {
-            Debug.LogError($"[Universal Exporter] Erro Crítico: {e.Message}\n{e.StackTrace}");
-        }
+        catch (Exception e) { Debug.LogError($"[MasterExporter] {e.Message}"); }
         finally
         {
             if (EditorSceneManager.GetActiveScene().path != originalScenePath)
@@ -87,90 +66,51 @@ public static class MasterExporter
         }
     }
 
-    private static async Task RunSceneExporters(List<IExporter> exporters, Scene scene, ExportContext ctx)
+    private static void WriteManifest(ExportContext ctx, string timestamp, ExportScope scope, List<string> scenes)
     {
-        if (!string.IsNullOrEmpty(scene.path)) ctx.TrackAsset(scene.path);
-        foreach (var exporter in exporters) await exporter.ExportScene(scene, ctx);
-    }
-
-    private static void WriteManifest(ExportContext ctx, string timestamp, ExportScope scope)
-    {
-        bool hasGltFast = false;
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            if (assembly.GetName().Name.IndexOf("gltfast", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                hasGltFast = true;
-                break;
-            }
-        }
-
         var sb = new StringBuilder();
         sb.AppendLine("{");
-        sb.AppendLine($"  \"projectName\": \"{ExportUtils.Esc(PlayerSettings.productName)}\",");
-        sb.AppendLine($"  \"exportVersion\": \"{VERSION}\",");
+        sb.AppendLine($"  \"projectName\": \"{ExportUtils.Esc(Application.productName)}\",");
+        sb.AppendLine($"  \"exportedAt\": \"{DateTime.Now:dd/MM/yyyy HH:mm}\",");
         sb.AppendLine($"  \"unityVersion\": \"{Application.unityVersion}\",");
-        sb.AppendLine($"  \"scope\": \"{scope}\",");
-        sb.AppendLine($"  \"exportedAt\": \"{DateTime.Now.ToString("dd/MM/yyyy HH:mm")}\",");
-        sb.AppendLine($"  \"gltfastInstalled\": {ExportUtils.B(hasGltFast)},");
-        
-        sb.AppendLine($"  \"rawAssets\": {{ \"registered\": {ctx.Assets.Registered}, \"copied\": {ctx.Assets.Copied}, \"skipped\": {ctx.Assets.Skipped} }}");
+        sb.AppendLine("  \"scenes\": [");
+        for (int i = 0; i < scenes.Count; i++)
+        {
+            string sName = Path.GetFileNameWithoutExtension(scenes[i]);
+            sb.AppendLine($"    \"{ExportUtils.Esc(sName)}\"{(i < scenes.Count - 1 ? "," : "")}");
+        }
+        sb.AppendLine("  ],");
+        sb.AppendLine($"  \"rawAssets\": {{ \"registered\": {ctx.Assets.Registered}, \"copied\": {ctx.Assets.Copied} }}");
         sb.AppendLine("}");
+        File.WriteAllText(Path.Combine(ctx.StagingDir, "export_manifest.json"), sb.ToString());
+    }
 
-        File.WriteAllText(Path.Combine(ctx.StagingDir, "export_manifest.json"), sb.ToString(), Encoding.UTF8);
+    private static async Task RunSceneExporters(List<IExporter> exporters, Scene scene, ExportContext ctx)
+    {
+        foreach (var exporter in exporters) await exporter.ExportScene(scene, ctx);
     }
 
     private static void GenerateHtmlReport(string stagingDir, string finalHtmlPath)
     {
         string[] guids = AssetDatabase.FindAssets("unity-inspector");
-        string htmlContent = "";
-
-        foreach (var guid in guids)
-        {
-            string path = Path.GetFullPath(AssetDatabase.GUIDToAssetPath(guid));
-            if (!File.Exists(path)) continue;
-            
-            string content = File.ReadAllText(path);
-            
-            if (!content.Contains("id=\"universal-export-data\"")) 
-            {
-                htmlContent = content;
-                break;
+        string htmlTemplate = "";
+        foreach (var guid in guids) {
+            string p = Path.GetFullPath(AssetDatabase.GUIDToAssetPath(guid));
+            if (File.Exists(p) && !File.ReadAllText(p).Contains("id=\"universal-export-data\"")) {
+                htmlTemplate = File.ReadAllText(p); break;
             }
         }
 
-        if (string.IsNullOrEmpty(htmlContent))
-        {
-            Debug.LogError("[Universal Exporter] Template 'unity-inspector.html' não encontrado!");
-            return;
-        }
-
         StringBuilder sb = new StringBuilder();
-        
         sb.AppendLine("<script id=\"universal-export-data\" type=\"application/json\">");
         sb.AppendLine("{ \"files\": [");
-
-        string[] jsonFiles = Directory.GetFiles(stagingDir, "*.json", SearchOption.AllDirectories);
-        
-        for (int i = 0; i < jsonFiles.Length; i++)
-        {
-            string fileName = Path.GetFileName(jsonFiles[i]);
-            byte[] fileBytes = File.ReadAllBytes(jsonFiles[i]);
-            string base64 = Convert.ToBase64String(fileBytes); // Voltamos para o Base64 nativo!
-            
-            string comma = i < jsonFiles.Length - 1 ? "," : "";
-            sb.AppendLine($"  {{ \"name\": \"{fileName}\", \"content\": \"{base64}\" }}{comma}");
+        string[] files = Directory.GetFiles(stagingDir, "*.json", SearchOption.AllDirectories);
+        for (int i = 0; i < files.Length; i++) {
+            string base64 = Convert.ToBase64String(File.ReadAllBytes(files[i]));
+            sb.AppendLine($"  {{ \"name\": \"{Path.GetFileName(files[i])}\", \"content\": \"{base64}\" }}{(i < files.Length - 1 ? "," : "")}");
         }
-
-        sb.AppendLine("] }");
-        sb.AppendLine("</script>");
-
-        if (htmlContent.Contains("</head>"))
-            htmlContent = htmlContent.Replace("</head>", sb.ToString() + "\n</head>");
-        else
-            htmlContent += sb.ToString();
-
-        File.WriteAllText(finalHtmlPath, htmlContent, Encoding.UTF8);
+        sb.AppendLine("] }</script>");
+        File.WriteAllText(finalHtmlPath, htmlTemplate.Replace("</head>", sb.ToString() + "</head>"), Encoding.UTF8);
     }
 }
 #endif

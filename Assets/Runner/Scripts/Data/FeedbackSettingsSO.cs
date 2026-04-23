@@ -3,12 +3,22 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "NewFeedbackSettings", menuName = "Runner/Feedback Settings")]
 public class FeedbackSettingsSO : ScriptableObject
 {
-    [field: Header("Audio")]
-    [field: SerializeField] public AudioClip CoinSound { get; private set; }
-    [field: SerializeField] public AudioClip ObstacleHitSound { get; private set; }
-    [field: SerializeField, Range(0f, 1f)] public float SfxVolume { get; private set; } = 0.8f;
+    [field: Header("Audio")] 
+    
+    [field: SerializeField] private AudioClip coinSound;
+    public AudioClip CoinSound => coinSound;
 
-    [field: Header("Visual Effects (VFX) - Para o Futuro")]
-    [field: SerializeField] public GameObject CoinCollectVFXPrefab { get; private set; }
-    [field: SerializeField] public GameObject ObstacleHitVFXPrefab { get; private set; }
+    [field: SerializeField] private AudioClip obstacleHitSound;
+    public AudioClip ObstacleHitSound => obstacleHitSound;
+    
+    [field: SerializeField, Range(0f, 1f)] private float sfxVolume;
+    public float SfxVolume => sfxVolume;
+
+    [field: Header("Visual Effects (VFX)")] 
+    
+    [field: SerializeField] private GameObject coinCollectVFXPrefab;
+    public GameObject CoinCollectVFXPrefab => coinCollectVFXPrefab;
+    
+    [field: SerializeField] private GameObject obstacleHitVFXPrefab;
+    public GameObject ObstacleHitVFXPrefab => obstacleHitVFXPrefab;
 }

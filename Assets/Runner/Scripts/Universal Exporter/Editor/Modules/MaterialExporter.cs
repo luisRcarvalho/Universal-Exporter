@@ -9,7 +9,7 @@ using UnityEngine.SceneManagement;
 public class MaterialExporter : IExporter
 {
     public string ModuleName => "materials";
-    public int Order => 52; // CORRIGIDO!
+    public int Order => 52;
 
     public async Task ExportProject(ExportContext ctx) { await Task.CompletedTask; }
 
