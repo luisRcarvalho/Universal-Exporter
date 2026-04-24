@@ -169,7 +169,7 @@ public class UniversalExporterWindow : EditorWindow
         if (GUILayout.Button("Exportar Seleção (ZIP)", GUILayout.Height(40)))
         {
             var activeScenes = _sceneSelection.Where(k => k.Value).Select(k => k.Key).ToList();
-            StartExportProcess(ExportScope.FullProject, activeScenes);
+            StartExportProcess(ExportScope.CurrentScene, activeScenes);
         }
         
         GUI.backgroundColor = oldColor;
