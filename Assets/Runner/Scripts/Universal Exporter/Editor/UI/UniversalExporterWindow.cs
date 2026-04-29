@@ -7,11 +7,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 
-public class ExportProfile : ScriptableObject
-{
-    public List<string> ActiveModules = new List<string>();
-}
-
 public class UniversalExporterWindow : EditorWindow
 {
     private Vector2 _mainScroll;
