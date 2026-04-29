@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using UnityEngine.SceneManagement;
+using System.Threading.Tasks;
 
 public interface IExporter
 {
@@ -7,8 +8,8 @@ public interface IExporter
 
     int Order { get; }
 
-    void ExportProject(ExportContext ctx);
+    Task ExportProject(ExportContext ctx);
     
-    void ExportScene(Scene scene, ExportContext ctx);
+    Task ExportScene(Scene scene, ExportContext ctx);
 }
 #endif

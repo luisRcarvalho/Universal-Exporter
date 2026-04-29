@@ -4,18 +4,16 @@ using System.IO;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
+using System.Threading.Tasks;
 
 public class ScriptableObjectExporter : IExporter
 {
-    public string ModuleName => "data";
+    public string ModuleName => "scriptable_objects";
     public int Order => 10;
 
-    public void ExportScene(UnityEngine.SceneManagement.Scene scene, ExportContext ctx) 
-    { 
-        
-    }
+    public async Task ExportScene(UnityEngine.SceneManagement.Scene scene, ExportContext ctx) { await Task.CompletedTask; }
 
-    public void ExportProject(ExportContext ctx)
+    public async Task ExportProject(ExportContext ctx)
     {
         var guids = AssetDatabase.FindAssets("t:ScriptableObject", new[] { "Assets" });
         int count = 0;
@@ -32,6 +30,7 @@ public class ScriptableObjectExporter : IExporter
         }
 
         Debug.Log($"[SO Exporter] {count} ScriptableObjects exportados.");
+        await Task.CompletedTask;
     }
 
     bool ShouldSkipNamespace(ScriptableObject so)

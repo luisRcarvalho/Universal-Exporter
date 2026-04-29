@@ -4,15 +4,16 @@ using System.Text;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using System.Threading.Tasks;
 
 public class AudioClipMetadataExporter : IExporter
 {
     public string ModuleName => "audio";
     public int Order => 70;
 
-    public void ExportProject(ExportContext ctx) { }
+    public async Task ExportProject(ExportContext ctx) {await Task.CompletedTask; }
 
-    public void ExportScene(Scene scene, ExportContext ctx)
+    public async Task ExportScene(Scene scene, ExportContext ctx)
     {
         var sources = UnityEngine.Object.FindObjectsByType<AudioSource>(FindObjectsSortMode.None);
         if (sources.Length == 0) return;
@@ -42,6 +43,7 @@ public class AudioClipMetadataExporter : IExporter
 
         File.WriteAllText(Path.Combine(ctx.EnsureDir(ModuleName), $"audio_{scene.name}.json"), sb.ToString(), Encoding.UTF8);
         Debug.Log($"[AudioExporter] {sources.Length} AudioSources exportados.");
+        await Task.CompletedTask;
     }
 }
 #endif

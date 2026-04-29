@@ -6,15 +6,16 @@ using System.Reflection;
 using System.Text;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using System.Threading.Tasks;
 
 public class SceneHierarchyExporter : IExporter
 {
     public string ModuleName => "hierarchy";
     public int Order => 90;
 
-    public void ExportProject(ExportContext ctx) { }
+    public async Task ExportProject(ExportContext ctx) {await Task.CompletedTask; }
 
-    public void ExportScene(Scene scene, ExportContext ctx)
+    public async Task ExportScene(Scene scene, ExportContext ctx)
     {
         var roots = scene.GetRootGameObjects();
         var sb = new StringBuilder();
@@ -34,6 +35,7 @@ public class SceneHierarchyExporter : IExporter
 
         File.WriteAllText(Path.Combine(ctx.EnsureDir(ModuleName), $"hierarchy_{scene.name}.json"), sb.ToString(), Encoding.UTF8);
         Debug.Log($"[HierarchyExporter] {roots.Length} raízes da cena exportadas.");
+        await Task.CompletedTask;
     }
 
     string SerializeGameObject(GameObject go, int indent, ExportContext ctx)

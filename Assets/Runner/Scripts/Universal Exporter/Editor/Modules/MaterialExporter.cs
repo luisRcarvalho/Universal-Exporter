@@ -2,20 +2,20 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using UnityEditor;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
 public class MaterialExporter : IExporter
 {
     public string ModuleName => "materials";
-    public int Order => 40;
+    public int Order => 52;
 
-    public void ExportProject(ExportContext ctx) { }
+    public async Task ExportProject(ExportContext ctx) { await Task.CompletedTask; }
 
-    public void ExportScene(Scene scene, ExportContext ctx)
+    public async Task ExportScene(Scene scene, ExportContext ctx)
     {
-        var renderers = UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None);
+        var renderers = Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None);
         var materialsMap = new Dictionary<string, Material>();
 
         foreach (var r in renderers)
@@ -51,6 +51,7 @@ public class MaterialExporter : IExporter
         sb.AppendLine("}");
 
         File.WriteAllText(Path.Combine(ctx.EnsureDir(ModuleName), $"materials_{scene.name}.json"), sb.ToString(), Encoding.UTF8);
+        await Task.CompletedTask;
     }
 }
 #endif
